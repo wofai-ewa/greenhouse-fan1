@@ -1,0 +1,29 @@
+{
+  "$schema": "https://dl.viam.dev/module.schema.json",
+  "module_id": "viam:greenhouse-fan1",
+  "visibility": "public",
+  "url": "",
+  "description": "Modular switch component: greenhouse-fan1",
+  "models": [
+    {
+      "api": "rdk:component:switch",
+      "model": "viam:greenhouse-fan1:greenhouse-fan1",
+      "markdown_link": "viam_greenhouse-fan1_greenhouse-fan1.md"
+    }
+  ],
+  "applications": null,
+  "markdown_link": "README.md",
+  "entrypoint": "dist/main",
+  "first_run": "",
+  "build": {
+    "build": "./build.sh",
+    "setup": "./setup.sh",
+    "path": "dist/archive.tar.gz",
+    "arch": [
+      "linux/amd64",
+      "linux/arm64",
+      "darwin/arm64",
+      "windows/amd64"
+    ]
+  }
+}

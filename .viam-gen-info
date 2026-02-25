@@ -1,0 +1,13 @@
+{
+  "module_name": "greenhouse-fan1",
+  "visibility": "public",
+  "namespace": "viam",
+  "language": "python",
+  "resource_type": "component",
+  "resource_subtype": "switch",
+  "model_name": "greenhouse-fan1",
+  "initialize_git": false,
+  "generator_version": "0.1.0",
+  "generated_on": "2026-02-25T20:19:04.808922Z",
+  "module_readme_link": "README.md"
+}
