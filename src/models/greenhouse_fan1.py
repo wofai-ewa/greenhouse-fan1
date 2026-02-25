@@ -30,12 +30,12 @@ from viam.utils import ValueTypes
 # GPIO pin for the fan relay
 FAN_PIN = 27
 
-# Temperature thresholds in Celsius
-TEMP_ON_C  = 23.9  # ~75°F — turn fan ON
-TEMP_OFF_C = 21.1  # ~70°F — turn fan OFF
+# Default temperature thresholds in Celsius
+DEFAULT_TEMP_ON_C  = 23.9  # ~75°F — turn fan ON
+DEFAULT_TEMP_OFF_C = 21.1  # ~70°F — turn fan OFF
 
 # How often to check temperature (seconds)
-POLL_INTERVAL = 10
+DEFAULT_POLL_INTERVAL = 10
 
 
 class GreenhouseFan1(Switch, EasyResource):
@@ -46,6 +46,9 @@ class GreenhouseFan1(Switch, EasyResource):
     _position: int = 0          # 0 = off, 1 = on
     _sensor: Optional[Sensor] = None
     _monitor_task: Optional[asyncio.Task] = None
+    _temp_on_c: float = DEFAULT_TEMP_ON_C
+    _temp_off_c: float = DEFAULT_TEMP_OFF_C
+    _poll_interval: int = DEFAULT_POLL_INTERVAL
 
     @classmethod
     def new(
@@ -57,8 +60,17 @@ class GreenhouseFan1(Switch, EasyResource):
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(FAN_PIN, GPIO.OUT, initial=GPIO.LOW)
 
+        # Read configurable thresholds
+        fields = config.attributes.fields
+        if "temp_on_c" in fields:
+            inst._temp_on_c = fields["temp_on_c"].number_value
+        if "temp_off_c" in fields:
+            inst._temp_off_c = fields["temp_off_c"].number_value
+        if "poll_interval" in fields:
+            inst._poll_interval = int(fields["poll_interval"].number_value)
+
         # Grab the temp sensor dependency if configured
-        sensor_name = config.attributes.fields.get("sensor_name")
+        sensor_name = fields.get("sensor_name")
         if sensor_name:
             for rn, dep in dependencies.items():
                 if rn.name == sensor_name.string_value and isinstance(dep, Sensor):
@@ -88,10 +100,10 @@ class GreenhouseFan1(Switch, EasyResource):
                     readings = await self._sensor.get_readings()
                     temp_c = readings.get("temperature")
                     if temp_c is not None:
-                        if temp_c >= TEMP_ON_C and self._position == 0:
+                        if temp_c >= self._temp_on_c and self._position == 0:
                             self.logger.info(f"Temp {temp_c:.1f}°C >= threshold, turning fan ON")
                             await self.set_position(1)
-                        elif temp_c <= TEMP_OFF_C and self._position == 1:
+                        elif temp_c <= self._temp_off_c and self._position == 1:
                             self.logger.info(f"Temp {temp_c:.1f}°C <= threshold, turning fan OFF")
                             await self.set_position(0)
             except Exception as e:
