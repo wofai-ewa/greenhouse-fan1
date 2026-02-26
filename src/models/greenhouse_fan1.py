@@ -27,8 +27,8 @@ from viam.resource.easy_resource import EasyResource
 from viam.resource.types import Model, ModelFamily
 from viam.utils import ValueTypes
 
-# GPIO pin for the fan relay
-FAN_PIN = 27
+# Default GPIO pin for the fan relay
+DEFAULT_FAN_PIN = 27
 
 # Default temperature thresholds in Celsius
 DEFAULT_TEMP_ON_C  = 23.9  # ~75°F — turn fan ON
@@ -43,9 +43,10 @@ class GreenhouseFan1(Switch, EasyResource):
         ModelFamily("viam", "greenhouse-fan1"), "greenhouse-fan1"
     )
 
-    _position: int = 0          # 0 = off, 1 = on
+    _position: int = 0
     _sensor: Optional[Sensor] = None
     _monitor_task: Optional[asyncio.Task] = None
+    _fan_pin: int = DEFAULT_FAN_PIN
     _temp_on_c: float = DEFAULT_TEMP_ON_C
     _temp_off_c: float = DEFAULT_TEMP_OFF_C
     _poll_interval: int = DEFAULT_POLL_INTERVAL
@@ -58,10 +59,12 @@ class GreenhouseFan1(Switch, EasyResource):
 
         # Set up GPIO
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup(FAN_PIN, GPIO.OUT, initial=GPIO.LOW)
+        GPIO.setup(inst._fan_pin, GPIO.OUT, initial=GPIO.LOW)
 
         # Read configurable thresholds
         fields = config.attributes.fields
+        if "fan_pin" in fields:
+            inst._fan_pin = int(fields["fan_pin"].number_value)
         if "temp_on_c" in fields:
             inst._temp_on_c = fields["temp_on_c"].number_value
         if "temp_off_c" in fields:
@@ -139,7 +142,7 @@ class GreenhouseFan1(Switch, EasyResource):
         if position not in (0, 1):
             raise ValueError(f"Invalid position {position}: must be 0 (off) or 1 (on)")
         self._position = position
-        GPIO.output(FAN_PIN, GPIO.HIGH if position == 1 else GPIO.LOW)
+        GPIO.output(self._fan_pin, GPIO.HIGH if position == 1 else GPIO.LOW)
         self.logger.info(f"Fan set to {'ON' if position == 1 else 'OFF'}")
 
     async def do_command(
