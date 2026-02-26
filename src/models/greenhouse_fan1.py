@@ -1,11 +1,19 @@
 import asyncio
-from typing import (Any, ClassVar, Dict, Final, List, Mapping, Optional,
+from typing import (Any, ClassVar, Dict, Mapping, Optional,
                     Sequence, Tuple)
+
+from typing_extensions import Self
+from viam.components.switch import Switch
+from viam.proto.app.robot import ComponentConfig
+from viam.proto.common import Geometry, ResourceName
+from viam.resource.base import ResourceBase
+from viam.resource.easy_resource import EasyResource
+from viam.resource.types import Model, ModelFamily
+from viam.utils import ValueTypes
 
 try:
     import RPi.GPIO as GPIO
 except ImportError:
-    # Mock GPIO for non-Pi environments (e.g. local build/test)
     class GPIO:
         BCM = OUT = HIGH = LOW = 0
         @staticmethod
@@ -16,26 +24,8 @@ except ImportError:
         def output(*args): pass
         @staticmethod
         def cleanup(): pass
-from typing_extensions import Self
-from viam.components.component_base import ComponentBase
-from viam.components.sensor import Sensor
-from viam.components.switch import Switch
-from viam.proto.app.robot import ComponentConfig
-from viam.proto.common import Geometry, ResourceName
-from viam.resource.base import ResourceBase
-from viam.resource.easy_resource import EasyResource
-from viam.resource.types import Model, ModelFamily
-from viam.utils import ValueTypes
 
-# Default GPIO pin for the fan relay
 DEFAULT_FAN_PIN = 27
-
-# Default temperature thresholds in Celsius
-DEFAULT_TEMP_ON_C  = 23.9  # ~75°F — turn fan ON
-DEFAULT_TEMP_OFF_C = 21.1  # ~70°F — turn fan OFF
-
-# How often to check temperature (seconds)
-DEFAULT_POLL_INTERVAL = 10
 
 
 class GreenhouseFan1(Switch, EasyResource):
@@ -44,12 +34,7 @@ class GreenhouseFan1(Switch, EasyResource):
     )
 
     _position: int = 0
-    _sensor: Optional[Sensor] = None
-    _monitor_task: Optional[asyncio.Task] = None
     _fan_pin: int = DEFAULT_FAN_PIN
-    _temp_on_c: float = DEFAULT_TEMP_ON_C
-    _temp_off_c: float = DEFAULT_TEMP_OFF_C
-    _poll_interval: int = DEFAULT_POLL_INTERVAL
 
     @classmethod
     def new(
@@ -57,31 +42,12 @@ class GreenhouseFan1(Switch, EasyResource):
     ) -> Self:
         inst = super().new(config, dependencies)
 
-        # Set up GPIO
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(inst._fan_pin, GPIO.OUT, initial=GPIO.LOW)
-
-        # Read configurable thresholds
         fields = config.attributes.fields
         if "fan_pin" in fields:
             inst._fan_pin = int(fields["fan_pin"].number_value)
-        if "temp_on_c" in fields:
-            inst._temp_on_c = fields["temp_on_c"].number_value
-        if "temp_off_c" in fields:
-            inst._temp_off_c = fields["temp_off_c"].number_value
-        if "poll_interval" in fields:
-            inst._poll_interval = int(fields["poll_interval"].number_value)
 
-        # Grab the temp sensor dependency if configured
-        sensor_name = fields.get("sensor_name")
-        if sensor_name:
-            for rn, dep in dependencies.items():
-                if rn.name == sensor_name.string_value and isinstance(dep, Sensor):
-                    inst._sensor = dep
-                    break
-
-        # Start background temperature monitor
-        inst._monitor_task = asyncio.create_task(inst._temp_monitor())
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(inst._fan_pin, GPIO.OUT, initial=GPIO.LOW)
 
         return inst
 
@@ -89,29 +55,7 @@ class GreenhouseFan1(Switch, EasyResource):
     def validate_config(
         cls, config: ComponentConfig
     ) -> Tuple[Sequence[str], Sequence[str]]:
-        # sensor_name is an optional dependency
-        sensor_name = config.attributes.fields.get("sensor_name")
-        if sensor_name:
-            return [], [sensor_name.string_value]
         return [], []
-
-    async def _temp_monitor(self):
-        """Background loop: read temp sensor and auto-toggle fan."""
-        while True:
-            try:
-                if self._sensor:
-                    readings = await self._sensor.get_readings()
-                    temp_c = readings.get("temperature")
-                    if temp_c is not None:
-                        if temp_c >= self._temp_on_c and self._position == 0:
-                            self.logger.info(f"Temp {temp_c:.1f}°C >= threshold, turning fan ON")
-                            await self.set_position(1)
-                        elif temp_c <= self._temp_off_c and self._position == 1:
-                            self.logger.info(f"Temp {temp_c:.1f}°C <= threshold, turning fan OFF")
-                            await self.set_position(0)
-            except Exception as e:
-                self.logger.warning(f"Temp monitor error: {e}")
-            await asyncio.sleep(POLL_INTERVAL)
 
     async def get_number_of_positions(
         self,
@@ -163,6 +107,4 @@ class GreenhouseFan1(Switch, EasyResource):
         return []
 
     def __del__(self):
-        if self._monitor_task:
-            self._monitor_task.cancel()
         GPIO.cleanup()
